@@ -63,6 +63,16 @@ class Column
      * @var boolean
      */
     protected $identity = false;
+
+    /**
+     * @var integer
+     */
+    protected $precision;
+
+    /**
+     * @var integer
+     */
+    protected $scale;
     
     /**
      * @var string
@@ -73,6 +83,11 @@ class Column
      * @var string
      */
     protected $update;
+
+    /**
+     * @var string
+     */
+    protected $comment;
 
     /**
      * Sets the column name.
@@ -121,7 +136,7 @@ class Column
     /**
      * Sets the column limit.
      *
-     * @param string $limit
+     * @param integer $limit
      * @return Column
      */
     public function setLimit($limit)
@@ -133,7 +148,7 @@ class Column
     /**
      * Gets the column limit.
      *
-     * @return string
+     * @return integer
      */
     public function getLimit()
     {
@@ -274,6 +289,72 @@ class Column
     }
 
     /**
+     * Sets the column precision for decimal.
+     *
+     * @param integer $precision
+     * @return Column
+     */
+    public function setPrecision($precision)
+    {
+        $this->precision = $precision;
+        return $this;
+    }
+    
+    /**
+     * Gets the column precision for decimal.
+     *
+     * @return integer
+     */
+    public function getPrecision()
+    {
+        return $this->precision;
+    }
+
+    /**
+     * Sets the column scale for decimal.
+     *
+     * @param integer $scale
+     * @return Column
+     */
+    public function setScale($scale)
+    {
+        $this->scale = $scale;
+        return $this;
+    }
+    
+    /**
+     * Gets the column scale for decimal.
+     *
+     * @return integer
+     */
+    public function getScale()
+    {
+        return $this->scale;
+    }
+
+    /**
+     * Sets the column comment.
+     *
+     * @param string $comment
+     * @return Column
+     */
+    public function setComment($comment)
+    {
+        $this->comment = $comment;
+        return $this;
+    }
+
+    /**
+     * Gets the column comment.
+     *
+     * @return string
+     */
+    public function getComment()
+    {
+        return $this->comment;
+    }
+
+    /**
      * Utility method that maps an array of column options to this objects methods.
      *
      * @param array $options Options
@@ -282,7 +363,7 @@ class Column
     public function setOptions($options)
     {
         // Valid Options
-        $validOptions = array('limit', 'length', 'default', 'null', 'precision', 'scale', 'after', 'update');
+        $validOptions = array('limit', 'length', 'default', 'null', 'precision', 'scale', 'after', 'update', 'comment');
         foreach ($options as $option => $value) {
             if (!in_array($option, $validOptions)) {
                 throw new \RuntimeException('\'' . $option . '\' is not a valid column option.');

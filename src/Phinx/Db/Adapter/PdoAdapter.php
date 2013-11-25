@@ -215,7 +215,9 @@ abstract class PdoAdapter implements AdapterInterface
     public function endCommandTimer()
     {
         $end = microtime(true);
-        $this->getOutput()->writeln('    -> ' . sprintf('%.4fs', $end - $this->getCommandStartTime()));
+        if (OutputInterface::VERBOSITY_VERBOSE === $this->getOutput()->getVerbosity()) {
+            $this->getOutput()->writeln('    -> ' . sprintf('%.4fs', $end - $this->getCommandStartTime()));
+        }
     }
 
     /**
@@ -227,22 +229,24 @@ abstract class PdoAdapter implements AdapterInterface
      */
     public function writeCommand($command, $args = array())
     {
-        if (count($args)) {
-            $outArr = array();
-            foreach ($args as $arg) {
-                if (is_array($arg)) {
-                    $arg = array_map(function($value) {
-                        return '\'' . $value . '\'';
-                    }, $arg);
-                    $outArr[] = '[' . implode(', ', $arg)  . ']';
-                    continue;
-                }
+        if (OutputInterface::VERBOSITY_VERBOSE === $this->getOutput()->getVerbosity()) {
+            if (count($args)) {
+                $outArr = array();
+                foreach ($args as $arg) {
+                    if (is_array($arg)) {
+                        $arg = array_map(function($value) {
+                            return '\'' . $value . '\'';
+                        }, $arg);
+                        $outArr[] = '[' . implode(', ', $arg)  . ']';
+                        continue;
+                    }
                 
-                $outArr[] = '\'' . $arg . '\'';
+                    $outArr[] = '\'' . $arg . '\'';
+                }
+                return $this->getOutput()->writeln(' -- ' . $command . '(' . implode(', ', $outArr) . ')');
             }
-            return $this->getOutput()->writeln(' -- ' . $command . '(' . implode(', ', $outArr) . ')');
+            $this->getOutput()->writeln(' -- ' . $command);
         }
-        $this->getOutput()->writeln(' -- ' . $command);
     }
      
     /**
@@ -313,7 +317,7 @@ abstract class PdoAdapter implements AdapterInterface
      */
     public function migrated(MigrationInterface $migration, $direction, $startTime, $endTime)
     {
-        if (strtolower($direction) == 'up') {
+        if (strtolower($direction) == MigrationInterface::UP) {
             // up
             $sql = sprintf(
                 'INSERT INTO %s ('
@@ -391,7 +395,7 @@ abstract class PdoAdapter implements AdapterInterface
                   ->addColumn('end_time', 'timestamp')
                   ->save();
         } catch(\Exception $exception) {
-            throw new \InvalidArgumentException('There was a problem creating the schema table');
+            throw new \InvalidArgumentException('There was a problem creating the schema table: ' . $exception->getMessage());
         }
     }
 

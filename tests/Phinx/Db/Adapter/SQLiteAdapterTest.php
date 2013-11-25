@@ -3,9 +3,9 @@
 namespace Test\Phinx\Db\Adapter;
 
 use Symfony\Component\Console\Output\NullOutput,
-    Phinx\Db\Adapter\MysqlAdapter;
+    Phinx\Db\Adapter\SQLiteAdapter;
 
-class MysqlAdapterTest extends \PHPUnit_Framework_TestCase
+class SQLiteAdapterTest extends \PHPUnit_Framework_TestCase
 {
     /**
      * @var \Phinx\Db\Adapter\MysqlAdapter
@@ -14,18 +14,14 @@ class MysqlAdapterTest extends \PHPUnit_Framework_TestCase
     
     public function setUp()
     {
-        if (!TESTS_PHINX_DB_ADAPTER_MYSQL_ENABLED) {
-            $this->markTestSkipped('Mysql tests disabled. See TESTS_PHINX_DB_ADAPTER_MYSQL_ENABLED constant.');
+        if (!TESTS_PHINX_DB_ADAPTER_SQLITE_ENABLED) {
+            $this->markTestSkipped('SQLite tests disabled. See TESTS_PHINX_DB_ADAPTER_SQLITE_ENABLED constant.');
         }
 
         $options = array(
-            'host' => TESTS_PHINX_DB_ADAPTER_MYSQL_HOST,
-            'name' => TESTS_PHINX_DB_ADAPTER_MYSQL_DATABASE,
-            'user' => TESTS_PHINX_DB_ADAPTER_MYSQL_USERNAME,
-            'pass' => TESTS_PHINX_DB_ADAPTER_MYSQL_PASSWORD,
-            'port' => TESTS_PHINX_DB_ADAPTER_MYSQL_PORT
+            'name' => TESTS_PHINX_DB_ADAPTER_SQLITE_DATABASE
         );
-        $this->adapter = new MysqlAdapter($options, new NullOutput());
+        $this->adapter = new SQLiteAdapter($options, new NullOutput());
 
         // ensure the database is empty for each test
         $this->adapter->dropDatabase($options['name']);
@@ -44,36 +40,7 @@ class MysqlAdapterTest extends \PHPUnit_Framework_TestCase
     {
         $this->assertTrue($this->adapter->getConnection() instanceof \PDO);
     }
-    
-    public function testConnectionWithoutPort()
-    {
-        $options = $this->adapter->getOptions();
-        unset($options['port']);
-        $this->adapter->setOptions($options);
-        $this->assertTrue($this->adapter->getConnection() instanceof \PDO);
-    }
-    
-    public function testConnectionWithInvalidCredentials()
-    {
-        $options = array(
-            'host' => TESTS_PHINX_DB_ADAPTER_MYSQL_HOST,
-            'name' => TESTS_PHINX_DB_ADAPTER_MYSQL_DATABASE,
-            'port' => TESTS_PHINX_DB_ADAPTER_MYSQL_PORT,
-            'user' => 'invaliduser',
-            'pass' => 'invalidpass'
-        );
-        
-        try {
-            $adapter = new MysqlAdapter($options, new NullOutput());
-            $adapter->connect();
-            $this->fail('Expected the adapter to throw an exception');
-        } catch (\InvalidArgumentException $e) {
-            $this->assertInstanceOf('InvalidArgumentException', $e,
-                'Expected exception of type InvalidArgumentException, got ' . get_class($e));
-            $this->assertRegExp('/There was a problem connecting to the database/', $e->getMessage());
-        }
-    }
-    
+ 
     public function testCreatingTheSchemaTableOnConnect()
     {
         $this->adapter->connect();
@@ -114,6 +81,7 @@ class MysqlAdapterTest extends \PHPUnit_Framework_TestCase
         $table->addColumn('realname', 'string')
               ->addColumn('email', 'integer')
               ->save();
+
         $this->assertTrue($this->adapter->hasTable('ntable'));
         $this->assertTrue($this->adapter->hasColumn('ntable', 'custom_id'));
         $this->assertTrue($this->adapter->hasColumn('ntable', 'realname'));
@@ -182,26 +150,6 @@ class MysqlAdapterTest extends \PHPUnit_Framework_TestCase
         $this->markTestIncomplete();
     }
     
-    public function testCreateTableWithMyISAMEngine()
-    {
-        $table = new \Phinx\Db\Table('ntable', array('engine' => 'MyISAM'), $this->adapter);
-        $table->addColumn('realname', 'string')
-              ->save();
-        $this->assertTrue($this->adapter->hasTable('ntable'));
-        $row = $this->adapter->fetchRow(sprintf('SHOW TABLE STATUS WHERE Name = "%s"', 'ntable'));
-        $this->assertEquals('MyISAM', $row['Engine']);
-    }
-    
-    public function testCreateTableWithLatin1Collate()
-    {
-        $table = new \Phinx\Db\Table('latin1_table', array('collation' => 'latin1_general_ci'), $this->adapter);
-        $table->addColumn('name', 'string')
-              ->save();
-        $this->assertTrue($this->adapter->hasTable('latin1_table'));
-        $row = $this->adapter->fetchRow(sprintf('SHOW TABLE STATUS WHERE Name = "%s"', 'latin1_table'));
-        $this->assertEquals('latin1_general_ci', $row['Collation']);
-    }
-    
     public function testRenameTable()
     {
         $table = new \Phinx\Db\Table('table1', array(), $this->adapter);
@@ -217,14 +165,15 @@ class MysqlAdapterTest extends \PHPUnit_Framework_TestCase
     {
         $table = new \Phinx\Db\Table('table1', array(), $this->adapter);
         $table->save();
-        $this->assertFalse($table->hasColumn('email'));
+
         $table->addColumn('email', 'string')
               ->save();
         $this->assertTrue($table->hasColumn('email'));
-        $table->addColumn('realname', 'string', array('after' => 'id'))
-              ->save();
-        $rows = $this->adapter->fetchAll('SHOW COLUMNS FROM table1');
-        $this->assertEquals('realname', $rows[1]['Field']);
+
+        // In SQLite it is not possible to dictate order of added columns.
+        // $table->addColumn('realname', 'string', array('after' => 'id'))
+        //       ->save();
+        // $this->assertEquals('realname', $rows[1]['Field']);
     }
 
     public function testAddColumnWithDefaultValue()
@@ -233,8 +182,8 @@ class MysqlAdapterTest extends \PHPUnit_Framework_TestCase
         $table->save();
         $table->addColumn('default_zero', 'string', array('default' => 'test'))
               ->save();
-        $rows = $this->adapter->fetchAll('SHOW COLUMNS FROM table1');
-        $this->assertEquals("test", $rows[1]['Default']);
+        $rows = $this->adapter->fetchAll(sprintf('pragma table_info(%s)', 'table1'));
+        $this->assertEquals("test", $rows[1]['dflt_value']);
     }
 
     public function testAddColumnWithDefaultZero()
@@ -243,9 +192,9 @@ class MysqlAdapterTest extends \PHPUnit_Framework_TestCase
         $table->save();
         $table->addColumn('default_zero', 'integer', array('default' => 0))
               ->save();
-        $rows = $this->adapter->fetchAll('SHOW COLUMNS FROM table1');
-        $this->assertNotNull($rows[1]['Default']);
-        $this->assertEquals("0", $rows[1]['Default']);
+        $rows = $this->adapter->fetchAll(sprintf('pragma table_info(%s)', 'table1'));
+        $this->assertNotNull($rows[1]['dflt_value']);
+        $this->assertEquals("0", $rows[1]['dflt_value']);
     }
 
     public function testAddColumnWithDefaultEmptyString()
@@ -254,8 +203,8 @@ class MysqlAdapterTest extends \PHPUnit_Framework_TestCase
         $table->save();
         $table->addColumn('default_zero', 'integer', array('default' => null))
               ->save();
-        $rows = $this->adapter->fetchAll('SHOW COLUMNS FROM table1');
-        $this->assertNull($rows[1]['Default']);
+        $rows = $this->adapter->fetchAll(sprintf('pragma table_info(%s)', 'table1'));
+        $this->assertNull($rows[1]['dflt_value']);
     }
     
     public function testRenameColumn()
@@ -264,7 +213,6 @@ class MysqlAdapterTest extends \PHPUnit_Framework_TestCase
         $table->addColumn('column1', 'string')
               ->save();
         $this->assertTrue($this->adapter->hasColumn('t', 'column1'));
-        $this->assertFalse($this->adapter->hasColumn('t', 'column2'));
         $this->adapter->renameColumn('t', 'column1', 'column2');
         $this->assertFalse($this->adapter->hasColumn('t', 'column1'));
         $this->assertTrue($this->adapter->hasColumn('t', 'column2'));
@@ -313,9 +261,9 @@ class MysqlAdapterTest extends \PHPUnit_Framework_TestCase
         $newColumn1->setDefault('test1')
                    ->setType('string');
         $table->changeColumn('column1', $newColumn1);
-        $rows = $this->adapter->fetchAll('SHOW COLUMNS FROM t');
-        $this->assertNotNull($rows[1]['Default']);
-        $this->assertEquals("test1", $rows[1]['Default']);
+        $rows = $this->adapter->fetchAll('pragma table_info(t)');
+
+        $this->assertEquals("test1", $rows[1]['dflt_value']);
     }
 
 
@@ -328,9 +276,8 @@ class MysqlAdapterTest extends \PHPUnit_Framework_TestCase
         $newColumn1->setDefault(0)
                    ->setType('integer');
         $table->changeColumn('column1', $newColumn1);
-        $rows = $this->adapter->fetchAll('SHOW COLUMNS FROM t');
-        $this->assertNotNull($rows[1]['Default']);
-        $this->assertEquals("0", $rows[1]['Default']);
+        $rows = $this->adapter->fetchAll('pragma table_info(t)');
+        $this->assertEquals("0", $rows[1]['dflt_value']);
     }
 
     public function testChangeColumnDefaultToNull()
@@ -342,8 +289,8 @@ class MysqlAdapterTest extends \PHPUnit_Framework_TestCase
         $newColumn1->setDefault(null)
                    ->setType('string');
         $table->changeColumn('column1', $newColumn1);
-        $rows = $this->adapter->fetchAll('SHOW COLUMNS FROM t');
-        $this->assertNull($rows[1]['Default']);
+        $rows = $this->adapter->fetchAll('pragma table_info(t)');
+        $this->assertNull($rows[1]['dflt_value']);
     }
     
     public function testDropColumn()
@@ -429,10 +376,11 @@ class MysqlAdapterTest extends \PHPUnit_Framework_TestCase
            ->setReferencedColumns(array('id'));
 
         $this->adapter->addForeignKey($table, $fk);
+
         $this->assertTrue($this->adapter->hasForeignKey($table->getName(), array('ref_table_id')));
     }
 
-    public function dropForeignKey()
+    public function testDropForeignKey()
     {
         $refTable = new \Phinx\Db\Table('ref_table', array(), $this->adapter);
         $refTable->addColumn('field1', 'string')->save();
@@ -470,9 +418,14 @@ class MysqlAdapterTest extends \PHPUnit_Framework_TestCase
         $table->addColumn('column1', 'string', array('comment' => $comment = 'Comments from "column1"'))
               ->save();
 
-        $rows = $this->adapter->fetchAll('SELECT column_name, column_comment FROM information_schema.columns WHERE table_name = "table1"');
-        $columnWithComment = $rows[1];
+        $rows = $this->adapter->fetchAll('select * from sqlite_master where `type` = \'table\'');
 
-        $this->assertEquals($comment, $columnWithComment['column_comment'], 'Dont set column comment correctly');
+        foreach($rows as $row) {
+            if ($row['tbl_name'] == 'table1') {
+                $sql = $row['sql'];
+            }
+        }
+
+        $this->assertRegExp('/\/\* Comments from "column1" \*\//', $sql);
     }
 }
